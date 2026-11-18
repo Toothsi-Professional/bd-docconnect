@@ -1,7 +1,7 @@
 /* Offline support + notifications.
    The site shell is kept on the device; pages and data come from the API (the shell keeps the
    last copies in local storage). Pushes arrive through Firebase Cloud Messaging. */
-const CACHE = 'bdc-shell-v6';
+const CACHE = 'bdc-shell-v7';
 const FILES = ['./', './home/', './admin/', './assets/shell.js', './assets/shell.css', './assets/config.js',
   './assets/icon-192.png', './assets/icon-512.png', './assets/apple-touch-icon.png', './manifest.webmanifest'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting())); });
