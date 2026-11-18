@@ -270,15 +270,72 @@
           return fetch(C.apiUrl, { method: 'POST', body: JSON.stringify({ key: C.apiKey, fn: 'pushRegister', args: [tok, plat, navigator.userAgent.slice(0, 150)], token: ls('bdc_token') }) })
             .then(function (r) { return r.json(); }).then(function (o) { if (!o.ok) throw new Error(o.error); ls('bdc_push', tok); return tok; });
         }).then(function (tok) {
-          msg.onMessage(function (p) {      // app open: show it anyway
-            var n = p.notification || {};
-            navigator.serviceWorker.getRegistration(BASE).then(function (reg) { if (reg) reg.showNotification(n.title || 'BD DocConnect', { body: n.body || '', icon: BASE + 'assets/icon-192.png', tag: (p.data && p.data.id) || '' }); });
+          msg.onMessage(function (p) {      // app open: banner inside the app
+            var n = p.notification || {}, d = p.data || {};
+            if (document.visibilityState === 'visible') showBanner({ id: d.id || '', title: n.title || 'BD DocConnect', body: n.body || '' });
+            else navigator.serviceWorker.getRegistration(BASE).then(function (reg) { if (reg) reg.showNotification(n.title || 'BD DocConnect', { body: n.body || '', icon: BASE + 'assets/icon-192.png', tag: d.id || '' }); });
           });
           if (!quiet) offlineNoteText('Notifications are on');
           return tok;
         });
       }).catch(function (e) { if (!quiet) alert('Couldn’t turn on notifications: ' + (e && e.message ? e.message : e)); });
     }
+    /* ---- In-app message banners ----
+       New admin messages show as a banner at the top of the app: live (push) while it is open,
+       and any unread ones when it opens. Without push, the app checks every minute while open. */
+    function seenIds() { try { return JSON.parse(ls('bdc_seen') || '[]'); } catch (e) { return []; } }
+    function markSeen(id) { var a = seenIds(); if (id && a.indexOf(id) < 0) { a.push(id); ls('bdc_seen', JSON.stringify(a.slice(-100))); } }
+    var shown = {};
+    function bannerBox() {
+      var b = document.getElementById('bdc-banners');
+      if (!b) {
+        b = document.createElement('div'); b.id = 'bdc-banners';
+        b.style.cssText = 'position:fixed;left:50%;top:calc(10px + env(safe-area-inset-top));transform:translateX(-50%);z-index:10000;width:min(560px,calc(100vw - 20px));display:grid;gap:8px;pointer-events:none';
+        document.body.appendChild(b);
+        var st = document.createElement('style');
+        st.textContent = '@keyframes bdcIn{from{transform:translateY(-16px);opacity:0}to{transform:none;opacity:1}}';
+        document.head.appendChild(st);
+      }
+      return b;
+    }
+    function showBanner(n) {
+      if (!n || !n.title || (n.id && (shown[n.id] || seenIds().indexOf(n.id) >= 0))) return;
+      if (n.id) shown[n.id] = 1;
+      var dark = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches;
+      var c = document.createElement('div');
+      c.setAttribute('role', 'alert');
+      c.style.cssText = 'pointer-events:auto;display:flex;gap:12px;align-items:flex-start;padding:14px 14px 12px;border-radius:16px;border-left:5px solid #D93F32;' +
+        'background:' + (dark ? '#18202A' : '#fff') + ';color:' + (dark ? '#F1F4F8' : '#14202B') + ';box-shadow:0 14px 38px rgba(0,0,0,.28);font:14px/1.4 -apple-system,BlinkMacSystemFont,Roboto,sans-serif;animation:bdcIn .25s ease-out';
+      var ic = document.createElement('div'); ic.textContent = '🔔';
+      ic.style.cssText = 'flex:none;width:34px;height:34px;border-radius:50%;background:#FDECEA;display:grid;place-items:center;font-size:17px';
+      var t = document.createElement('div'); t.style.cssText = 'flex:1;min-width:0';
+      var h = document.createElement('b'); h.textContent = n.title; h.style.cssText = 'display:block;font-size:15px';
+      var m = document.createElement('div'); m.textContent = n.body || ''; m.style.cssText = 'margin-top:2px;opacity:.85;white-space:pre-wrap';
+      var k = document.createElement('div'); k.textContent = 'From your admin' + (n.by ? ' · ' + n.by : ''); k.style.cssText = 'margin-top:4px;font-size:12px;opacity:.6';
+      var ok = document.createElement('button'); ok.textContent = 'Got it';
+      ok.style.cssText = 'flex:none;border:0;border-radius:10px;background:#D93F32;color:#fff;padding:8px 12px;font-weight:700;font-size:13px;font-family:inherit;cursor:pointer;align-self:center';
+      ok.onclick = function () {
+        markSeen(n.id); c.remove();
+        if (n.id) fetch(C.apiUrl, { method: 'POST', body: JSON.stringify({ key: C.apiKey, fn: 'noticeSeen', args: [[n.id]], token: ls('bdc_token') }) }).catch(function () {});
+      };
+      t.appendChild(h); if (n.body) t.appendChild(m); t.appendChild(k);
+      c.appendChild(ic); c.appendChild(t); c.appendChild(ok);
+      var box = bannerBox(); box.appendChild(c);
+      while (box.children.length > 3) box.removeChild(box.firstChild);
+      try { if (navigator.vibrate) navigator.vibrate(40); } catch (e) {}
+    }
+    function checkInbox() {
+      if (!ls('bdc_token') || document.visibilityState !== 'visible') return;
+      var since = Number(ls('bdc_inbox_since') || 0) || (Date.now() - 3 * 86400000);   // first time: the last 3 days
+      fetch(C.apiUrl, { method: 'POST', body: JSON.stringify({ key: C.apiKey, fn: 'inbox', args: [since], token: ls('bdc_token') }) })
+        .then(function (r) { return r.json(); }).then(function (o) {
+          if (!o.ok || !o.result) return;
+          ls('bdc_inbox_since', String(o.result.now || Date.now()));
+          (o.result.notices || []).slice(-3).forEach(showBanner);
+        }).catch(function () {});
+    }
+    window.bdcShowBanner = showBanner;
+
     function setupPush(menu) {
       // opened from a notification: count it as opened
       var nid = new URLSearchParams(location.search).get('n');
@@ -332,6 +389,9 @@
       b.onclick = function () { m.style.display = m.style.display === 'none' ? 'block' : 'none'; };
       document.body.appendChild(m); document.body.appendChild(b);
       setupPush(m);
+      checkInbox();
+      setInterval(checkInbox, 60000);
+      document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') checkInbox(); });
       // keep the role current (an admin added in Settings sees the console link next time)
       post('adminWhoAmI', []).then(function (w) { if (w && w.role) ls('bdc_role', w.role); if (PAGE === 'admin' && w && w.role === 'bdm') location.replace(BASE + 'home/'); }, function () {});
     });
