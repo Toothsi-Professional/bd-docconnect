@@ -122,7 +122,9 @@
       if (!cached) render(r.html);
       else if (fresh) {
         // New version: switch straight away unless the person has already started using the page.
-        if (!window.__bdcTouched) location.reload(); else showUpdateBar();
+        var once = 'bdc_reloaded_' + r.hash, done = false;
+        try { done = sessionStorage.getItem(once) === '1'; sessionStorage.setItem(once, '1'); } catch (e) { done = true; }
+        if (!window.__bdcTouched && !done) location.reload(); else showUpdateBar();
       }
     }, function (e) {
       if (!cached) document.getElementById('bdc-root').innerHTML =
