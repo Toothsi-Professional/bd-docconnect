@@ -136,6 +136,12 @@
   }
 
   function render(html) {
+    // document.open() is ignored while the page is still being parsed (the browser would add the new page
+    // under the loading screen), so wait until parsing has finished.
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function () { setTimeout(function () { render(html); }, 0); }, { once: true });
+      return;
+    }
     var viewAs = PAGE === 'home' ? String(params.get('viewAs') || '').trim().toLowerCase() : '';
     if (PAGE === 'home') html = html.replace("var VIEW_AS='';", 'var VIEW_AS=' + JSON.stringify(viewAs).replace(/</g, '\\u003c') + ';');
     var inject = '<script>window.BDC_CONFIG=' + JSON.stringify(C).replace(/</g, '\\u003c') + ';window.BDC_PAGE=' + JSON.stringify(PAGE) +
