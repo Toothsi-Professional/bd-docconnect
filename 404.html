@@ -3,12 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#D93F32">
 <title>BD DocConnect</title>
-<link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" href="assets/icon-192.png">
-<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-<script>location.replace((location.pathname.indexOf('/admin')>=0?'/admin/':'/home/'));</script>
+<script>
+// Unknown address: go to /home (or /admin) of this site, whether it runs at the domain root or under /bd-docconnect/.
+(function () {
+  var parts = location.pathname.split('/').filter(Boolean);
+  var base = parts.length && parts[0] !== 'home' && parts[0] !== 'admin' ? '/' + parts[0] + '/' : '/';
+  location.replace(base + (location.pathname.indexOf('/admin') >= 0 ? 'admin/' : 'home/'));
+})();
+</script>
 </head>
-<body><a href="home/">Open BD DocConnect</a></body>
+<body><a href="./">Open BD DocConnect</a></body>
 </html>
