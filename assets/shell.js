@@ -105,6 +105,11 @@
 
   /* ---------------- Load the page ---------------- */
   function start() {
+    // Admins land on the console (like the app); "My app" in the console opens /home/?view=app.
+    var role = LS.get(K.role) || 'bdm';
+    if (PAGE === 'home' && (role === 'admin' || role === 'super') && !params.get('viewAs') && params.get('view') !== 'app') {
+      location.replace(BASE + 'admin/'); return;
+    }
     var cached = LS.get(K.page);
     if (cached) render(cached);
     api('pageHtml', [PAGE]).then(function (r) {
@@ -206,7 +211,7 @@
       m.style.cssText = 'position:fixed;right:14px;bottom:' + (PAGE === 'home' ? '148px' : '68px') + ';z-index:9998;background:#fff;color:#14202B;border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.25);padding:6px;min-width:220px;font:14px -apple-system,Roboto,sans-serif;display:none';
       var item = function (label, fn) { var a = document.createElement('a'); a.href = '#'; a.textContent = label; a.style.cssText = 'display:block;padding:11px 12px;border-radius:10px;color:inherit;text-decoration:none;font-weight:600'; a.onclick = function (e) { e.preventDefault(); fn(); }; m.appendChild(a); };
       var who = document.createElement('div'); who.textContent = email + (role !== 'bdm' ? ' · ' + role : ''); who.style.cssText = 'padding:8px 12px;color:#5B6776;font-size:12.5px'; m.appendChild(who);
-      if (role === 'admin' || role === 'super') item(PAGE === 'admin' ? 'Open field app' : 'Open admin console', function () { location.href = BASE + (PAGE === 'admin' ? 'home/' : 'admin/'); });
+      if (role === 'admin' || role === 'super') item(PAGE === 'admin' ? 'Open field app' : 'Open admin console', function () { location.href = BASE + (PAGE === 'admin' ? 'home/?view=app' : 'admin/'); });
       item('Sign out', function () { if (confirm('Sign out of BD DocConnect on this device?')) { localStorage.removeItem('bdc_token'); location.href = BASE + 'home/?signout=1'; } });
       b.onclick = function () { m.style.display = m.style.display === 'none' ? 'block' : 'none'; };
       document.body.appendChild(m); document.body.appendChild(b);
