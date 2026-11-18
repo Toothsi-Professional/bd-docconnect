@@ -103,6 +103,8 @@
   }
   window.bdcSignOut = function () { signOut(false); };
 
+  ['pointerdown', 'keydown'].forEach(function (ev) { window.addEventListener(ev, function () { window.__bdcTouched = true; }, { capture: true, once: true }); });
+
   /* ---------------- Load the page ---------------- */
   function start() {
     // Admins land on the console (like the app); "My app" in the console opens /home/?view=app.
@@ -118,7 +120,10 @@
       if (!LS.set(K.page, r.html)) { /* storage full: still show it */ }
       LS.set(K.hash, r.hash);
       if (!cached) render(r.html);
-      else if (fresh) showUpdateBar();
+      else if (fresh) {
+        // New version: switch straight away unless the person has already started using the page.
+        if (!window.__bdcTouched) location.reload(); else showUpdateBar();
+      }
     }, function (e) {
       if (!cached) document.getElementById('bdc-root').innerHTML =
         '<div class="bdc-sign"><div class="bdc-logo big"></div><h1>Couldn’t open BD DocConnect</h1><p class="bdc-sub">' + esc(e.message) + '</p><button onclick="location.reload()">Try again</button></div>';
