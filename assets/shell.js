@@ -7,7 +7,7 @@
  */
 (function () {
   'use strict';
-  var C = window.BDC_CONFIG || {};
+  var C = self.BDC_CONFIG || window.BDC_CONFIG || {};
   var PAGE = document.documentElement.getAttribute('data-page') === 'admin' ? 'admin' : 'home';
   var BASE = location.pathname.replace(/(home|admin)\/?(index\.html)?$/, '');
   var K = { token: 'bdc_token', email: 'bdc_email', role: 'bdc_role', page: 'bdc_page_' + PAGE, hash: 'bdc_hash_' + PAGE };
@@ -249,6 +249,60 @@
         };
       } });
     }
+    /* ---- Notifications (Firebase Cloud Messaging) ---- */
+    function pushSupported() { return !!(C.firebase && C.vapidKey && 'Notification' in window && 'serviceWorker' in navigator && 'PushManager' in window); }
+    function loadScript(src) { return new Promise(function (ok, no) { var s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = no; document.head.appendChild(s); }); }
+    var fbReady = null;
+    function firebaseMessaging() {
+      if (!fbReady) fbReady = loadScript('https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js')
+        .then(function () { return loadScript('https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js'); })
+        .then(function () { if (!firebase.apps.length) firebase.initializeApp(C.firebase); return firebase.messaging(); });
+      return fbReady;
+    }
+    function registerPush(quiet) {
+      return firebaseMessaging().then(function (msg) {
+        return navigator.serviceWorker.getRegistration(BASE).then(function (reg) {
+          return msg.getToken({ vapidKey: C.vapidKey, serviceWorkerRegistration: reg });
+        }).then(function (tok) {
+          if (!tok) throw new Error('No push address');
+          var plat = /iPhone|iPad|iPod/i.test(navigator.userAgent) ? 'iphone' : /Android/i.test(navigator.userAgent) ? 'android' : 'computer';
+          if (ls('bdc_push') === tok) return tok;
+          return fetch(C.apiUrl, { method: 'POST', body: JSON.stringify({ key: C.apiKey, fn: 'pushRegister', args: [tok, plat, navigator.userAgent.slice(0, 150)], token: ls('bdc_token') }) })
+            .then(function (r) { return r.json(); }).then(function (o) { if (!o.ok) throw new Error(o.error); ls('bdc_push', tok); return tok; });
+        }).then(function (tok) {
+          msg.onMessage(function (p) {      // app open: show it anyway
+            var n = p.notification || {};
+            navigator.serviceWorker.getRegistration(BASE).then(function (reg) { if (reg) reg.showNotification(n.title || 'BD DocConnect', { body: n.body || '', icon: BASE + 'assets/icon-192.png', tag: (p.data && p.data.id) || '' }); });
+          });
+          if (!quiet) offlineNoteText('Notifications are on');
+          return tok;
+        });
+      }).catch(function (e) { if (!quiet) alert('Couldn’t turn on notifications: ' + (e && e.message ? e.message : e)); });
+    }
+    function setupPush(menu) {
+      // opened from a notification: count it as opened
+      var nid = new URLSearchParams(location.search).get('n');
+      if (nid) fetch(C.apiUrl, { method: 'POST', body: JSON.stringify({ key: C.apiKey, fn: 'noticeSeen', args: [[nid]], token: ls('bdc_token') }) }).catch(function () {});
+      if (!pushSupported()) return;
+      if (Notification.permission === 'granted') { registerPush(true); return; }
+      if (Notification.permission === 'denied') return;
+      var on = function () { Notification.requestPermission().then(function (p) { if (p === 'granted') { pill.remove(); registerPush(false); } else if (pill) pill.remove(); }); };
+      var pill = document.createElement('button');
+      pill.textContent = '🔔 Turn on notifications';
+      pill.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:' + (PAGE === 'home' ? '96px' : '16px') + ';z-index:9997;border:0;border-radius:999px;background:#D93F32;color:#fff;padding:11px 18px;font:700 14px -apple-system,Roboto,sans-serif;box-shadow:0 8px 22px rgba(217,63,50,.35);cursor:pointer';
+      pill.onclick = on;                       // iPhone needs a tap to ask
+      document.body.appendChild(pill);
+      var a = document.createElement('a'); a.href = '#'; a.textContent = 'Turn on notifications';
+      a.style.cssText = 'display:block;padding:11px 12px;border-radius:10px;color:inherit;text-decoration:none;font-weight:600';
+      a.onclick = function (e) { e.preventDefault(); on(); };
+      menu.insertBefore(a, menu.children[1] || null);
+    }
+    function offlineNoteText(t) {
+      var d = document.createElement('div'); d.textContent = t;
+      d.style.cssText = 'position:fixed;left:50%;top:10px;transform:translateX(-50%);z-index:9999;background:#15803D;color:#fff;padding:7px 14px;border-radius:999px;font:600 13px -apple-system,Roboto,sans-serif';
+      document.body.appendChild(d); setTimeout(function () { d.remove(); }, 3000);
+    }
+
     var noteShown = false;
     function offlineNote() {
       if (noteShown) return; noteShown = true;
@@ -277,6 +331,7 @@
       item('Sign out', function () { if (confirm('Sign out of BD DocConnect on this device?')) { localStorage.removeItem('bdc_token'); location.href = BASE + 'home/?signout=1'; } });
       b.onclick = function () { m.style.display = m.style.display === 'none' ? 'block' : 'none'; };
       document.body.appendChild(m); document.body.appendChild(b);
+      setupPush(m);
       // keep the role current (an admin added in Settings sees the console link next time)
       post('adminWhoAmI', []).then(function (w) { if (w && w.role) ls('bdc_role', w.role); if (PAGE === 'admin' && w && w.role === 'bdm') location.replace(BASE + 'home/'); }, function () {});
     });
