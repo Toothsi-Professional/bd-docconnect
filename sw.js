@@ -1,6 +1,6 @@
 /* Offline support: the site shell is kept on the device; pages and data come from the API
    (the shell keeps the last copies in local storage). */
-const CACHE = 'bdc-shell-v4';
+const CACHE = 'bdc-shell-v5';
 const FILES = ['./', './home/', './admin/', './assets/shell.js', './assets/shell.css', './assets/config.js',
   './assets/icon-192.png', './assets/icon-512.png', './assets/apple-touch-icon.png', './manifest.webmanifest'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting())); });

@@ -18,13 +18,31 @@
   };
   var params = new URLSearchParams(location.search);
 
-  /* ---------------- Apple devices only ----------------
-     iPhone / iPad (and Macs) use this site. Android phones use the official app. */
+  var SHARE = '<svg class="bdc-i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M8 7l4-4 4 4"/><path d="M6 11H5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1"/></svg>';
+  var PLUS = '<svg class="bdc-i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M12 8v8M8 12h8"/></svg>';
+  var DOTS = '<svg class="bdc-i" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>';
+
+  /* ---------------- Installed app only ----------------
+     Works on Android, iPhone/iPad and computers, but only as the installed app
+     (home-screen / desktop app). In a normal browser tab it shows how to install. */
   var ua = navigator.userAgent || '';
-  var isAndroid = /Android/i.test(ua);
   var isIOS = /iPhone|iPad|iPod/i.test(ua) || (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 1);   // iPadOS reports as Mac
-  var isMac = /Macintosh/i.test(ua) && !isIOS;
-  if (!isIOS && !isMac) { blocked(); return; }
+  var isAndroid = /Android/i.test(ua);
+  var isSamsung = /SamsungBrowser/i.test(ua);
+  var isMacSafari = /Macintosh/i.test(ua) && !isIOS && /Safari/i.test(ua) && !/Chrome|Chromium|Edg\//i.test(ua);
+  var isFirefoxDesktop = /Firefox/i.test(ua) && !isAndroid && !isIOS;
+  var installed = ['standalone', 'fullscreen', 'minimal-ui', 'window-controls-overlay'].some(function (m) {
+    try { return window.matchMedia('(display-mode: ' + m + ')').matches; } catch (e) { return false; }
+  }) || navigator.standalone === true;
+  var embedded = window.self !== window.top;          // the console's "View as BDM" frame
+  var installPrompt = null;
+  window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); installPrompt = e; if (!installed) showInstall(); });
+  window.addEventListener('appinstalled', function () { installPrompt = null; showInstalled(); });
+  if (!installed && !embedded) {
+    if ('serviceWorker' in navigator) { try { navigator.serviceWorker.register(BASE + 'sw.js'); } catch (e) {} }   // needed for "Install"
+    showInstall();
+    return;
+  }
 
   if ('serviceWorker' in navigator) { try { navigator.serviceWorker.register(BASE + 'sw.js'); } catch (e) {} }
 
@@ -49,15 +67,46 @@
   var token = LS.get(K.token);
   if (!token) showSignIn(); else start();
 
-  function blocked() {
+  function step(n, html) { return '<li><span class="bdc-n">' + n + '</span><div>' + html + '</div></li>'; }
+
+  function showInstall() {
     var root = document.getElementById('bdc-root');
-    root.innerHTML = isAndroid
-      ? '<div class="bdc-sign"><div class="bdc-logo big"></div><h1>Please use the official Android app</h1>' +
-        '<p class="bdc-sub">This link is for iPhone users. On Android, install the BD DocConnect app — it has live tracking, notifications and works offline.</p>' +
-        (C.androidAppUrl ? '<a class="bdc-btn" href="' + esc(C.androidAppUrl) + '">Get the Android app</a>' : '') + '</div>'
-      : '<div class="bdc-sign"><div class="bdc-logo big"></div><h1>Open this on your iPhone</h1>' +
-        '<p class="bdc-sub">This link is for iPhone and iPad. On Android use the BD DocConnect app; admins on a computer use the main web app.</p>' +
-        (C.webAppUrl ? '<a class="bdc-btn ghost" href="' + esc(C.webAppUrl) + '">Open the web app</a>' : '') + '</div>';
+    var how;
+    if (isIOS) {
+      how = '<ol class="bdc-steps">' +
+        step(1, 'Open this page in <b>Safari</b> (or Chrome) and tap <b>Share</b> ' + SHARE + ' at the bottom (top on iPad).') +
+        step(2, 'Scroll and tap <b>Add to Home Screen</b> ' + PLUS + '.') +
+        step(3, 'Tap <b>Add</b>, then open <b>BD DocConnect</b> from your home screen.') + '</ol>';
+    } else if (installPrompt) {
+      how = '<button class="bdc-btn" id="inst">Install BD DocConnect</button><p class="bdc-small">Then open it from your ' + (isAndroid ? 'home screen' : 'apps / dock') + '.</p>';
+    } else if (isAndroid) {
+      how = '<ol class="bdc-steps">' +
+        (isSamsung ? step(1, 'Tap the menu <b>≡</b> at the bottom right.') + step(2, 'Tap <b>Add page to</b> → <b>Home screen</b>.')
+                   : step(1, 'Tap the menu ' + DOTS + ' at the top right of Chrome.') + step(2, 'Tap <b>Install app</b> (or <b>Add to Home screen</b> → <b>Install</b>).')) +
+        step(3, 'Open <b>BD DocConnect</b> from your home screen.') + '</ol>';
+    } else if (isMacSafari) {
+      how = '<ol class="bdc-steps">' + step(1, 'In Safari’s menu bar choose <b>File → Add to Dock…</b>') + step(2, 'Click <b>Add</b>, then open <b>BD DocConnect</b> from the Dock.') + '</ol>';
+    } else if (isFirefoxDesktop) {
+      how = '<p class="bdc-sub">Firefox can’t install apps. Open this page in <b>Chrome</b> or <b>Edge</b> to install BD DocConnect.</p>';
+    } else {
+      how = '<ol class="bdc-steps">' + step(1, 'Click the <b>Install</b> icon at the right end of the address bar (or the ' + DOTS + ' menu → <b>Cast, save and share → Install page as app</b>).') +
+        step(2, 'Click <b>Install</b>, then open <b>BD DocConnect</b> from your apps.') + '</ol>';
+    }
+    root.innerHTML = '<div class="bdc-sign"><div class="bdc-logo big"></div><h1>Install BD DocConnect</h1>' +
+      '<p class="bdc-sub">BD DocConnect works as an app on your ' + (isIOS ? 'iPhone' : isAndroid ? 'phone' : 'computer') + '. Install it once — it opens full-screen with its own icon, keeps your sign-in and works with poor internet.</p>' +
+      '<div class="bdc-card bdc-how">' + how + '</div>' +
+      '<p class="bdc-foot">Already installed? Open <b>BD DocConnect</b> from your ' + (isIOS || isAndroid ? 'home screen' : 'apps') + '.</p></div>';
+    var b = document.getElementById('inst');
+    if (b) b.onclick = function () {
+      var p = installPrompt; if (!p) return;
+      p.prompt();
+      p.userChoice.then(function (c) { if (c && c.outcome === 'accepted') showInstalled(); });
+    };
+  }
+
+  function showInstalled() {
+    document.getElementById('bdc-root').innerHTML = '<div class="bdc-sign"><div class="bdc-logo big"></div><h1>Installed ✓</h1>' +
+      '<p class="bdc-sub">Open <b>BD DocConnect</b> from your ' + (isAndroid || isIOS ? 'home screen' : 'apps') + ' to sign in. You can close this tab.</p></div>';
   }
 
   /* ---------------- Sign-in ---------------- */
