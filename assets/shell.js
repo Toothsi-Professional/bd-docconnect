@@ -56,9 +56,29 @@
       return r.text();
     }, function () { throw netErr('No internet connection.'); }).then(function (t) {
       var o; try { o = JSON.parse(t); } catch (e) { throw netErr('The server sent an unexpected reply. Try again in a minute.'); }
+      if (fn !== 'pageHtml') noteBuild(o.build); else { try { if (o.build) localStorage.setItem('bdc_build', o.build); } catch (e) {} }
       if (!o.ok) { var er = new Error(o.error || 'Something went wrong.'); er.code = o.code || ''; throw er; }
       return o.result;
     });
+  }
+
+  /* New version deployed: ask to refresh (can't be dismissed). The first build seen on this device is just remembered. */
+  function noteBuild(b) {
+    if (!b) return;
+    var k = 'bdc_build', had; try { had = localStorage.getItem(k); localStorage.setItem(k, b); } catch (e) { return; }
+    if (had && had !== b) showRefresh();
+  }
+  function showRefresh() {
+    if (document.getElementById('bdc-refresh')) return;
+    var d = document.createElement('div'); d.id = 'bdc-refresh';
+    d.setAttribute('style', 'position:fixed;inset:0;z-index:2147483647;background:rgba(20,32,43,.55);display:flex;align-items:center;justify-content:center;padding:16px;font-family:-apple-system,Roboto,Segoe UI,sans-serif');
+    d.innerHTML = '<div style="background:#fff;border-radius:18px;max-width:340px;width:100%;padding:22px 20px;text-align:center;box-shadow:0 18px 50px rgba(0,0,0,.3)">' +
+      '<div style="width:48px;height:48px;border-radius:14px;background:#FDECEA;color:#D93F32;font-size:24px;line-height:48px;margin:0 auto 12px">⟳</div>' +
+      '<div style="font-weight:800;font-size:18px;color:#14202B">New version available</div>' +
+      '<div style="color:#5B6776;font-size:14.5px;margin:6px 0 18px">BD DocConnect has been updated. Refresh to continue.</div>' +
+      '<button style="width:100%;border:0;border-radius:12px;background:#D93F32;color:#fff;font-weight:700;font-size:15.5px;padding:13px">Refresh now</button></div>';
+    d.querySelector('button').onclick = function () { this.disabled = true; this.textContent = 'Refreshing…'; location.reload(); };
+    (document.body || document.documentElement).appendChild(d);
   }
   function netErr(m) { var e = new Error(m); e.code = 'net'; return e; }
   function esc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -173,7 +193,7 @@
         // New version: switch straight away unless the person has already started using the page.
         var once = 'bdc_reloaded_' + r.hash, done = false;
         try { done = sessionStorage.getItem(once) === '1'; sessionStorage.setItem(once, '1'); } catch (e) { done = true; }
-        if (!window.__bdcTouched && !done) location.reload(); else showUpdateBar();
+        if (!window.__bdcTouched && !done) location.reload(); else showRefresh();
       }
     }, function (e) {
       if (!cached) document.getElementById('bdc-root').innerHTML =
@@ -213,6 +233,25 @@
   function bridge() {
     var C = window.BDC_CONFIG, PAGE = window.BDC_PAGE, BASE = window.BDC_BASE;
     var READ = /^(getFieldBdm|adminWhoAmI|adminTeamLive|adminPlans|adminDoctors|adminRoute|adminLiveOf|adminUsage|adminUsers|adminSettings|adminNotices)/;
+
+    /* New version deployed: ask to refresh (can't be dismissed). The first build seen on this device is just remembered. */
+    function noteBuild(b) {
+      if (!b) return;
+      var k = 'bdc_build', had; try { had = localStorage.getItem(k); localStorage.setItem(k, b); } catch (e) { return; }
+      if (had && had !== b) showRefresh();
+    }
+    function showRefresh() {
+      if (document.getElementById('bdc-refresh')) return;
+      var d = document.createElement('div'); d.id = 'bdc-refresh';
+      d.setAttribute('style', 'position:fixed;inset:0;z-index:2147483647;background:rgba(20,32,43,.55);display:flex;align-items:center;justify-content:center;padding:16px;font-family:-apple-system,Roboto,Segoe UI,sans-serif');
+      d.innerHTML = '<div style="background:#fff;border-radius:18px;max-width:340px;width:100%;padding:22px 20px;text-align:center;box-shadow:0 18px 50px rgba(0,0,0,.3)">' +
+        '<div style="width:48px;height:48px;border-radius:14px;background:#FDECEA;color:#D93F32;font-size:24px;line-height:48px;margin:0 auto 12px">⟳</div>' +
+        '<div style="font-weight:800;font-size:18px;color:#14202B">New version available</div>' +
+        '<div style="color:#5B6776;font-size:14.5px;margin:6px 0 18px">BD DocConnect has been updated. Refresh to continue.</div>' +
+        '<button style="width:100%;border:0;border-radius:12px;background:#D93F32;color:#fff;font-weight:700;font-size:15.5px;padding:13px">Refresh now</button></div>';
+      d.querySelector('button').onclick = function () { this.disabled = true; this.textContent = 'Refreshing…'; location.reload(); };
+      (document.body || document.documentElement).appendChild(d);
+    }
     function ls(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
     function post(fn, args) {
       var token = ls('bdc_token');
@@ -220,6 +259,7 @@
         .then(function (r) { return r.text(); }, function () { var e = new Error('No internet connection.'); e.code = 'net'; throw e; })
         .then(function (t) {
           var o; try { o = JSON.parse(t); } catch (e) { var x = new Error('The server sent an unexpected reply.'); x.code = 'net'; throw x; }
+          noteBuild(o.build);
           if (!o.ok) { var er = new Error(o.error || 'Something went wrong.'); er.code = o.code || ''; throw er; }
           return o.result ? o.result.value : null;
         });
