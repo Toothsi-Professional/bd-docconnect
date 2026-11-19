@@ -371,6 +371,8 @@
         .then(function (r) { return r.json(); }).then(function (o) {
           if (!o.ok || !o.result) return;
           ls('bdc_inbox_since', String(o.result.now || Date.now()));
+          noteBuild(o.build);
+          if (o.result.changes) { try { window.dispatchEvent(new CustomEvent('bdc:changes', { detail: o.result.changes })); } catch (e) {} }
           (o.result.notices || []).slice(-3).forEach(showBanner);
         }).catch(function () {});
     }
